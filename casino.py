@@ -1,28 +1,41 @@
+
 import customtkinter as ctk
 import random
+
+# =========================================================
+# НАСТРОЙКИ
+# =========================================================
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 app = ctk.CTk()
-app.title("🎰 КАЗИНО DELUXE")
-app.geometry("700x850")
+app.title("🎰 CASINO DELUXE")
+app.geometry("1100x700")
+app.minsize(900, 600)
 
-# =========================
-# СТАН ГРИ
-# =========================
+# =========================================================
+# СОСТОЯНИЕ ИГРЫ
+# =========================================================
 
-chips = 100
+START_BALANCE = 100
+MAX_CREDIT = 1_000_000
+CREDIT_PERCENT = 0.20
+CREDIT_TURNS = 5
+
+chips = START_BALANCE
 debt = 0
-interest = 0.20
 turns_left = 0
 game_round = 1
-spinning = False
 
+wins = 0
+losses = 0
 
-# =========================
-# РУЛЕТКА
-# =========================
+history = []
+
+# =========================================================
+# ЦВЕТА РУЛЕТКИ
+# =========================================================
 
 RED = {
     1, 3, 5, 7, 9, 12, 14, 16, 18,
@@ -34,166 +47,56 @@ BLACK = {
     20, 22, 24, 26, 28, 29, 31, 33, 35
 }
 
+SLOT_SYMBOLS = ["🍒", "🍋", "🍊", "💎", "7️⃣"]
 
-def number_color(number):
-    if number == 0:
-        return "🟢"
-    if number in RED:
-        return "🔴"
-    return "⚫"
+# =========================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# =========================================================
 
-
-# =========================
-# ОНОВЛЕННЯ ІНФОРМАЦІЇ
-# =========================
-
-def update_ui():
-    balance.configure(text=f"🪙 КРЕДИТИ: {chips}")
-    debt_label.configure(
-        text=f"💳 БОРГ: {debt} 🪙"
-    )
-    timer_label.configure(
-        text=f"⏳ ДО ТЕРМІНУ: {turns_left} ХОДІВ"
-    )
-    round_label.configure(
-        text=f"🔄 РАУНД: {game_round}"
-    )
-
-    if debt > 0:
-        debt_label.configure(text_color="orange")
-    else:
-        debt_label.configure(text_color="white")
+def money(value):
+    return f"{value:,}".replace(",", " ")
 
 
-# =========================
-# КРЕДИТ
-# =========================
+def update_balance():
+    balance_label.configure(text=f"🪙 {money(chips)}")
+    debt_label.configure(text=f"💳 Борг: {money(debt)} 🪙")
+    timer_label.configure(text=f"⏳ Ходів: {turns_left}")
+    round_label.configure(text=f"🔄 Раунд: {game_round}")
 
-def take_credit():
-    global chips, debt, turns_left
 
-    if debt > 0:
-        result.configure(
-            text="❌ У тебе вже є непогашений кредит!",
-            text_color="red"
-        )
-        return
+def clear_content():
+    for widget in content_frame.winfo_children():
+        widget.destroy()
 
-    amount = 500
 
+def add_history(text):
+    history.insert(0, text)
+
+    if len(history) > 10:
+        history.pop()
+
+
+def change_balance(amount):
+    global chips
     chips += amount
-    debt = amount
-    turns_left = 5
-
-    update_ui()
-
-    result.configure(
-        text=(
-            f"💳 Ти взяв кредит {amount} 🪙\n"
-            f"Повернути треба {int(amount * (1 + interest))} 🪙"
-        ),
-        text_color="orange"
-    )
+    update_balance()
 
 
-def repay_credit():
-    global chips, debt, turns_left, game_round
+def parse_bet(entry):
+    try:
+        amount = int(entry.get().replace(" ", ""))
 
-    if debt <= 0:
-        result.configure(
-            text="ℹ️ У тебе немає боргу"
-        )
-        return
+        if amount <= 0:
+            return None, "❌ Ставка должна быть больше 0."
 
-    if chips < debt:
-        result.configure(
-            text=f"❌ Потрібно {debt} 🪙",
-            text_color="red"
-        )
-        return
+        if amount > chips:
+            return None, "❌ Недостаточно монет."
 
-    chips -= debt
-    debt = 0
-    turns_left = 0
+        return amount, None
 
-    game_round += 1
+    except ValueError:
+        return None, "❌ Введите целое число."
 
-    result.configure(
-        text="✅ Кредит повністю погашено!",
-        text_color="lime"
-    )
-
-    update_ui()
-
-
-# =========================
-# КОЛЕКТОР
-# =========================
-
-def collector():
-    global chips, debt, turns_left, game_round
-
-    penalty = min(chips, 100)
-
-    chips -= penalty
-
-    debt = 0
-    turns_left = 0
-    game_round += 1
-
-    win = ctk.CTkToplevel(app)
-    win.title("🚨 КОЛЕКТОР")
-    win.geometry("500x400")
-    win.grab_set()
-
-    ctk.CTkLabel(
-        win,
-        text="🚨 КОЛЕКТОР ПРИЇХАВ!",
-        font=("Arial", 32, "bold"),
-        text_color="red"
-    ).pack(pady=30)
-
-    ctk.CTkLabel(
-        win,
-        text=(
-            "— ГРОШІ Є?\n"
-            "— Немає...\n"
-            "— Ну тоді забираємо штраф 😈"
-        ),
-        font=("Arial", 20)
-    ).pack(pady=20)
-
-    ctk.CTkLabel(
-        win,
-        text=f"💸 Штраф: -{penalty} 🪙",
-        font=("Arial", 20, "bold"),
-        text_color="orange"
-    ).pack(pady=10)
-
-    def restart():
-        win.destroy()
-
-        result.configure(
-            text="🔄 НОВИЙ РАУНД! Починай спочатку.",
-            text_color="cyan"
-        )
-
-        update_ui()
-
-    ctk.CTkButton(
-        win,
-        text="🔄 НОВИЙ РАУНД",
-        width=250,
-        height=50,
-        command=restart
-    ).pack(pady=20)
-
-    update_ui()
-
-
-# =========================
-# ХІД
-# =========================
 
 def make_turn():
     global turns_left
@@ -202,492 +105,829 @@ def make_turn():
         return
 
     turns_left -= 1
+    update_balance()
 
     if turns_left <= 0:
-        update_ui()
-
-        app.after(
-            500,
-            collector
-        )
-    else:
-        update_ui()
+        app.after(500, collector)
 
 
-# =========================
-# СЛОТИ
-# =========================
+# =========================================================
+# ГЛАВНАЯ
+# =========================================================
 
-def slots():
-    global chips
-
-    try:
-        bet = int(bet_entry.get())
-    except ValueError:
-        result.configure(
-            text="❌ Введи ставку"
-        )
-        return
-
-    if bet <= 0:
-        result.configure(
-            text="❌ Ставка має бути більше 0"
-        )
-        return
-
-    if bet > chips:
-        result.configure(
-            text="❌ Недостатньо кредитів"
-        )
-        return
-
-    chips -= bet
-
-    symbols = [
-        "🍒",
-        "🍋",
-        "🍊",
-        "💎",
-        "7️⃣"
-    ]
-
-    a, b, c = [
-        random.choice(symbols)
-        for _ in range(3)
-    ]
-
-    slot.configure(
-        text=f"{a}   {b}   {c}"
-    )
-
-    if a == b == c:
-        win = bet * 10
-        chips += win
-
-        result.configure(
-            text=f"🎰 ДЖЕКПОТ! +{win} 🪙",
-            text_color="gold"
-        )
-
-    elif a == b or b == c or a == c:
-        win = bet * 2
-        chips += win
-
-        result.configure(
-            text=f"🎉 ВИГРАШ! +{win} 🪙",
-            text_color="lime"
-        )
-
-    else:
-        result.configure(
-            text=f"😢 ПРОГРАШ! -{bet} 🪙",
-            text_color="red"
-        )
-
-    make_turn()
-    update_ui()
-
-
-# =========================
-# РУЛЕТКА
-# =========================
-
-def roulette():
-    global chips, spinning
-
-    if spinning:
-        return
-
-    try:
-        bet = int(bet_entry.get())
-    except ValueError:
-        result.configure(
-            text="❌ Введи ставку"
-        )
-        return
-
-    if bet <= 0 or bet > chips:
-        result.configure(
-            text="❌ Недостатньо кредитів"
-        )
-        return
-
-    chips -= bet
-
-    spinning = True
-
-    result.configure(
-        text="🎡 РУЛЕТКА ОБЕРТАЄТЬСЯ...",
-        text_color="yellow"
-    )
-
-    spin_animation(0, bet)
-
-
-def spin_animation(step, bet):
-    global spinning
-
-    number = random.randint(0, 36)
-
-    wheel.configure(
-        text=f"{number_color(number)} {number}"
-    )
-
-    if step < 35:
-        delay = 40 + step * 7
-
-        app.after(
-            delay,
-            lambda: spin_animation(
-                step + 1,
-                bet
-            )
-        )
-    else:
-        finish_roulette(bet)
-
-
-def finish_roulette(bet):
-    global chips, spinning
-
-    number = random.randint(0, 36)
-    choice = roulette_choice.get()
-
-    wheel.configure(
-        text=f"{number_color(number)} {number}"
-    )
-
-    won = False
-
-    if choice == "Червоне":
-        won = number in RED
-
-    elif choice == "Чорне":
-        won = number in BLACK
-
-    elif choice == "Парне":
-        won = number != 0 and number % 2 == 0
-
-    elif choice == "Непарне":
-        won = number % 2 == 1
-
-    if won:
-        win = bet * 2
-        chips += win
-
-        result.configure(
-            text=f"🎉 ВИГРАШ! Випало {number} +{win} 🪙",
-            text_color="lime"
-        )
-    else:
-        result.configure(
-            text=f"💀 ПРОГРАШ! Випало {number} -{bet} 🪙",
-            text_color="red"
-        )
-
-    spinning = False
-
-    make_turn()
-    update_ui()
-
-
-# =========================
-# ФЕЙКОВЕ ПОПОВНЕННЯ
-# =========================
-
-def deposit():
-    win = ctk.CTkToplevel(app)
-
-    win.title("💳 ТУТ ПРОДАЮТЬСЯ ГРОШІ!!!")
-    win.geometry("450x600")
-    win.grab_set()
+def show_home():
+    clear_content()
 
     ctk.CTkLabel(
-        win,
-        text="💳 ТУТ ПРОДАЮТЬСЯ ГРОШІ!!!",
-        font=("Arial", 24, "bold"),
+        content_frame,
+        text="🎰 CASINO DELUXE",
+        font=("Arial", 42, "bold"),
         text_color="gold"
-    ).pack(pady=25)
+    ).pack(pady=60)
 
     ctk.CTkLabel(
-        win,
-        text="⚠️ DEMO — реальних платежів немає",
-        text_color="orange"
-    ).pack(pady=5)
+        content_frame,
+        text="Добро пожаловать!",
+        font=("Arial", 28)
+    ).pack(pady=10)
 
     ctk.CTkLabel(
-        win,
-        text="💳 Тестовий номер"
-    ).pack(pady=(20, 5))
+        content_frame,
+        text="Выберите игру или функцию слева",
+        font=("Arial", 18),
+        text_color="gray"
+    ).pack(pady=10)
 
-    card = ctk.CTkEntry(
-        win,
-        placeholder_text="0000 0000 0000 0000",
-        width=300
+    stats = ctk.CTkFrame(content_frame)
+    stats.pack(pady=40)
+
+    ctk.CTkLabel(
+        stats,
+        text=f"🪙 Баланс: {money(chips)}",
+        font=("Arial", 20, "bold"),
+        text_color="gold"
+    ).pack(padx=30, pady=10)
+
+    ctk.CTkLabel(
+        stats,
+        text=f"🏆 Победы: {wins}     💀 Поражения: {losses}",
+        font=("Arial", 18)
+    ).pack(padx=30, pady=10)
+
+
+# =========================================================
+# БАРАБАНЫ
+# =========================================================
+
+def show_slots():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="🎰 БАРАБАНЫ",
+        font=("Arial", 36, "bold"),
+        text_color="gold"
+    ).pack(pady=30)
+
+    slot_label = ctk.CTkLabel(
+        content_frame,
+        text="🍒   🍋   🍒",
+        font=("Arial", 60)
     )
-    card.pack()
+    slot_label.pack(pady=30)
 
-    ctk.CTkLabel(
-        win,
-        text="🌐 Фейковий IP"
-    ).pack(pady=(20, 5))
-
-    fake_ip = (
-        f"192.168."
-        f"{random.randint(0,255)}."
-        f"{random.randint(1,254)}"
+    bet_entry = ctk.CTkEntry(
+        content_frame,
+        placeholder_text="💰 Ставка",
+        width=280,
+        height=50,
+        font=("Arial", 17)
     )
+    bet_entry.pack(pady=10)
 
-    ctk.CTkLabel(
-        win,
-        text=fake_ip,
-        font=("Consolas", 18),
-        text_color="cyan"
-    ).pack()
-
-    ctk.CTkLabel(
-        win,
-        text="🔐 Тестовий код"
-    ).pack(pady=(20, 5))
-
-    cvv = ctk.CTkEntry(
-        win,
-        placeholder_text="123",
-        show="*",
-        width=150
+    result = ctk.CTkLabel(
+        content_frame,
+        text="Сделайте ставку",
+        font=("Arial", 20)
     )
-    cvv.pack()
+    result.pack(pady=20)
 
-    package = ctk.StringVar(
-        value="50 грн → 20 кредитів"
-    )
+    def spin():
+        global chips, wins, losses
 
-    ctk.CTkOptionMenu(
-        win,
-        variable=package,
-        values=[
-            "50 грн → 20 кредитів",
-            "100 грн → 45 кредитів",
-            "200 грн → 100 кредитів",
-            "500 грн → 300 кредитів"
-        ]
-    ).pack(pady=25)
+        amount, error = parse_bet(bet_entry)
 
-    def add_money():
-        global chips
-
-        rewards = {
-            "50 грн → 20 кредитів": 20,
-            "100 грн → 45 кредитів": 45,
-            "200 грн → 100 кредитів": 100,
-            "500 грн → 300 кредитів": 300
-        }
-
-        if not card.get() or not cvv.get():
-            status.configure(
-                text="❌ Введи тестові дані",
+        if error:
+            result.configure(
+                text=error,
                 text_color="red"
             )
             return
 
-        amount = rewards[package.get()]
+        chips -= amount
+
+        symbols = [
+            random.choice(SLOT_SYMBOLS)
+            for _ in range(3)
+        ]
+
+        a, b, c = symbols
+
+        slot_label.configure(
+            text=f"{a}   {b}   {c}"
+        )
+
+        if a == b == c:
+            win = amount * 10
+            chips += win
+            wins += 1
+
+            result.configure(
+                text=f"🎉 ДЖЕКПОТ! +{money(win)} 🪙",
+                text_color="gold"
+            )
+
+            add_history(
+                f"🎰 Джекпот +{money(win)}"
+            )
+
+        elif a == b or b == c or a == c:
+            win = amount * 2
+            chips += win
+            wins += 1
+
+            result.configure(
+                text=f"🎉 ВЫИГРЫШ! +{money(win)} 🪙",
+                text_color="lime"
+            )
+
+            add_history(
+                f"🎰 Выигрыш +{money(win)}"
+            )
+
+        else:
+            losses += 1
+
+            result.configure(
+                text=f"😢 ПРОИГРЫШ! -{money(amount)} 🪙",
+                text_color="red"
+            )
+
+            add_history(
+                f"🎰 Проигрыш -{money(amount)}"
+            )
+
+        make_turn()
+        update_balance()
+
+    ctk.CTkButton(
+        content_frame,
+        text="🎰 КРУТИТЬ БАРАБАНЫ",
+        width=320,
+        height=55,
+        font=("Arial", 18, "bold"),
+        command=spin
+    ).pack(pady=10)
+
+
+# =========================================================
+# РУЛЕТКА
+# =========================================================
+
+def show_roulette():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="🎡 РУЛЕТКА",
+        font=("Arial", 36, "bold"),
+        text_color="gold"
+    ).pack(pady=25)
+
+    wheel = ctk.CTkLabel(
+        content_frame,
+        text="🟢 0",
+        font=("Arial", 65, "bold")
+    )
+    wheel.pack(pady=25)
+
+    bet_entry = ctk.CTkEntry(
+        content_frame,
+        placeholder_text="💰 Ставка",
+        width=280,
+        height=50
+    )
+    bet_entry.pack(pady=10)
+
+    choice = ctk.StringVar(value="Красное")
+
+    ctk.CTkOptionMenu(
+        content_frame,
+        variable=choice,
+        values=[
+            "Красное",
+            "Чёрное",
+            "Парное",
+            "Непарное"
+        ],
+        width=280,
+        height=45
+    ).pack(pady=10)
+
+    result = ctk.CTkLabel(
+        content_frame,
+        text="Сделайте ставку",
+        font=("Arial", 20)
+    )
+    result.pack(pady=20)
+
+    def spin():
+        global chips, wins, losses
+
+        amount, error = parse_bet(bet_entry)
+
+        if error:
+            result.configure(
+                text=error,
+                text_color="red"
+            )
+            return
+
+        chips -= amount
+
+        number = random.randint(0, 36)
+
+        if number == 0:
+            icon = "🟢"
+        elif number in RED:
+            icon = "🔴"
+        else:
+            icon = "⚫"
+
+        wheel.configure(
+            text=f"{icon} {number}"
+        )
+
+        selected = choice.get()
+
+        if selected == "Красное":
+            won = number in RED
+
+        elif selected == "Чёрное":
+            won = number in BLACK
+
+        elif selected == "Парное":
+            won = number != 0 and number % 2 == 0
+
+        else:
+            won = number % 2 == 1
+
+        if won:
+            win = amount * 2
+            chips += win
+            wins += 1
+
+            result.configure(
+                text=f"🎉 ВЫИГРЫШ! +{money(win)} 🪙",
+                text_color="lime"
+            )
+
+            add_history(
+                f"🎡 Рулетка: +{money(win)}"
+            )
+
+        else:
+            losses += 1
+
+            result.configure(
+                text=f"💀 ПРОИГРЫШ! -{money(amount)} 🪙",
+                text_color="red"
+            )
+
+            add_history(
+                f"🎡 Рулетка: -{money(amount)}"
+            )
+
+        make_turn()
+        update_balance()
+
+    ctk.CTkButton(
+        content_frame,
+        text="🎡 КРУТИТЬ РУЛЕТКУ",
+        width=320,
+        height=55,
+        fg_color="#A00000",
+        hover_color="#D00000",
+        font=("Arial", 18, "bold"),
+        command=spin
+    ).pack(pady=10)
+
+
+# =========================================================
+# КРЕДИТ
+# =========================================================
+
+def show_credit():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="💳 КРЕДИТНЫЙ ЦЕНТР",
+        font=("Arial", 36, "bold"),
+        text_color="orange"
+    ).pack(pady=30)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"Максимальный кредит: {money(MAX_CREDIT)} 🪙",
+        font=("Arial", 21)
+    ).pack(pady=10)
+
+    credit_entry = ctk.CTkEntry(
+        content_frame,
+        placeholder_text="Введите сумму кредита",
+        width=320,
+        height=50,
+        font=("Arial", 17)
+    )
+    credit_entry.pack(pady=20)
+
+    ctk.CTkLabel(
+        content_frame,
+        text="📈 Процент: 20%\n⏳ Срок: 5 ходов",
+        font=("Arial", 18),
+        text_color="yellow"
+    ).pack(pady=10)
+
+    info = ctk.CTkLabel(
+        content_frame,
+        text="Введите сумму от 1 до 1 000 000",
+        font=("Arial", 16)
+    )
+    info.pack(pady=15)
+
+    def take_credit():
+        global chips, debt, turns_left
+
+        if debt > 0:
+            info.configure(
+                text="❌ Сначала погасите текущий кредит.",
+                text_color="red"
+            )
+            return
+
+        try:
+            amount = int(
+                credit_entry.get().replace(" ", "")
+            )
+        except ValueError:
+            info.configure(
+                text="❌ Введите целое число.",
+                text_color="red"
+            )
+            return
+
+        if amount <= 0:
+            info.configure(
+                text="❌ Сумма должна быть больше 0.",
+                text_color="red"
+            )
+            return
+
+        if amount > MAX_CREDIT:
+            info.configure(
+                text="❌ Максимум — 1 000 000 🪙",
+                text_color="red"
+            )
+            return
+
+        debt = int(
+            amount * (1 + CREDIT_PERCENT)
+        )
 
         chips += amount
+        turns_left = CREDIT_TURNS
 
-        update_ui()
+        update_balance()
 
-        status.configure(
-            text=f"💰 +{amount} кредитів!",
+        info.configure(
+            text=(
+                f"💰 Получено: {money(amount)} 🪙\n"
+                f"💳 Вернуть: {money(debt)} 🪙"
+            ),
             text_color="lime"
         )
 
+        add_history(
+            f"💳 Взят кредит {money(amount)}"
+        )
+
     ctk.CTkButton(
-        win,
-        text="💸 КУПИТИ КРЕДИТИ",
-        width=280,
-        height=50,
+        content_frame,
+        text="💳 ВЗЯТЬ КРЕДИТ",
+        width=320,
+        height=55,
+        font=("Arial", 18, "bold"),
+        fg_color="#8B0000",
+        hover_color="#B00000",
+        command=take_credit
+    ).pack(pady=20)
+
+
+# =========================================================
+# ПОГАШЕНИЕ КРЕДИТА
+# =========================================================
+
+def show_repay():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="💰 ПОГАШЕНИЕ КРЕДИТА",
+        font=("Arial", 34, "bold"),
+        text_color="lime"
+    ).pack(pady=40)
+
+    if debt <= 0:
+        ctk.CTkLabel(
+            content_frame,
+            text="✅ У вас нет задолженности!",
+            font=("Arial", 25),
+            text_color="lime"
+        ).pack(pady=50)
+
+        return
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"💳 Текущий долг:\n{money(debt)} 🪙",
+        font=("Arial", 28, "bold"),
+        text_color="orange"
+    ).pack(pady=20)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"🪙 На балансе: {money(chips)}",
+        font=("Arial", 20)
+    ).pack(pady=10)
+
+    def repay():
+        global chips, debt, turns_left, game_round
+
+        if chips < debt:
+            show_insufficient()
+            return
+
+        chips -= debt
+        debt = 0
+        turns_left = 0
+        game_round += 1
+
+        add_history("💰 Кредит полностью погашен")
+
+        update_balance()
+        show_repay()
+
+    ctk.CTkButton(
+        content_frame,
+        text=f"💰 ПОГАСИТЬ {money(debt)} 🪙",
+        width=350,
+        height=55,
+        font=("Arial", 18, "bold"),
         fg_color="green",
         hover_color="darkgreen",
-        command=add_money
-    ).pack()
+        command=repay
+    ).pack(pady=30)
 
-    status = ctk.CTkLabel(
-        win,
-        text="Очікування..."
+
+def show_insufficient():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="❌ НЕДОСТАТОЧНО МОНЕТ",
+        font=("Arial", 30, "bold"),
+        text_color="red"
+    ).pack(pady=80)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=(
+            f"Нужно: {money(debt)} 🪙\n"
+            f"Есть: {money(chips)} 🪙"
+        ),
+        font=("Arial", 22)
+    ).pack(pady=20)
+
+
+# =========================================================
+# КОЛЛЕКТОР
+# =========================================================
+
+def collector():
+    global chips, debt, turns_left, game_round
+
+    if debt <= 0:
+        return
+
+    penalty = min(chips, 100)
+
+    chips -= penalty
+    debt = 0
+    turns_left = 0
+    game_round += 1
+
+    add_history(
+        f"🚨 Коллектор забрал {money(penalty)}"
     )
-    status.pack(pady=20)
+
+    update_balance()
+
+    win = ctk.CTkToplevel(app)
+    win.title("🚨 КОЛЛЕКТОР")
+    win.geometry("500x400")
+    win.grab_set()
+
+    ctk.CTkLabel(
+        win,
+        text="🚨 КОЛЛЕКТОР",
+        font=("Arial", 36, "bold"),
+        text_color="red"
+    ).pack(pady=30)
+
+    ctk.CTkLabel(
+        win,
+        text="Срок кредита закончился!",
+        font=("Arial", 20)
+    ).pack(pady=10)
+
+    ctk.CTkLabel(
+        win,
+        text=f"💸 Штраф: -{money(penalty)} 🪙",
+        font=("Arial", 24, "bold"),
+        text_color="orange"
+    ).pack(pady=20)
+
+    ctk.CTkButton(
+        win,
+        text="🔄 ПРОДОЛЖИТЬ",
+        width=250,
+        height=50,
+        command=win.destroy
+    ).pack(pady=20)
 
 
-# =========================
-# ІНТЕРФЕЙС
-# =========================
+# =========================================================
+# ИСТОРИЯ
+# =========================================================
+
+def show_history():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="📜 ИСТОРИЯ ИГР",
+        font=("Arial", 36, "bold"),
+        text_color="cyan"
+    ).pack(pady=30)
+
+    if not history:
+        ctk.CTkLabel(
+            content_frame,
+            text="История пока пустая.",
+            font=("Arial", 20),
+            text_color="gray"
+        ).pack(pady=50)
+
+        return
+
+    box = ctk.CTkTextbox(
+        content_frame,
+        width=600,
+        height=400,
+        font=("Arial", 17)
+    )
+    box.pack(pady=20)
+
+    for index, item in enumerate(history, 1):
+        box.insert(
+            "end",
+            f"{index}. {item}\n"
+        )
+
+    box.configure(state="disabled")
+
+
+# =========================================================
+# СТАТИСТИКА
+# =========================================================
+
+def show_stats():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="📊 СТАТИСТИКА",
+        font=("Arial", 36, "bold"),
+        text_color="cyan"
+    ).pack(pady=40)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"🏆 Победы: {wins}",
+        font=("Arial", 24),
+        text_color="lime"
+    ).pack(pady=10)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"💀 Поражения: {losses}",
+        font=("Arial", 24),
+        text_color="red"
+    ).pack(pady=10)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"🪙 Баланс: {money(chips)}",
+        font=("Arial", 24),
+        text_color="gold"
+    ).pack(pady=10)
+
+    ctk.CTkLabel(
+        content_frame,
+        text=f"🔄 Раунд: {game_round}",
+        font=("Arial", 24)
+    ).pack(pady=10)
+
+
+# =========================================================
+# ИНТЕРФЕЙС
+# =========================================================
+
+def show_interface():
+    clear_content()
+
+    ctk.CTkLabel(
+        content_frame,
+        text="🎨 ИНТЕРФЕЙС",
+        font=("Arial", 36, "bold"),
+        text_color="cyan"
+    ).pack(pady=50)
+
+    ctk.CTkButton(
+        content_frame,
+        text="🌙 Тёмная тема",
+        width=250,
+        height=45,
+        command=lambda: ctk.set_appearance_mode("dark")
+    ).pack(pady=10)
+
+    ctk.CTkButton(
+        content_frame,
+        text="☀️ Светлая тема",
+        width=250,
+        height=45,
+        command=lambda: ctk.set_appearance_mode("light")
+    ).pack(pady=10)
+
+
+# =========================================================
+# СБРОС ИГРЫ
+# =========================================================
+
+def reset_game():
+    global chips, debt, turns_left, game_round
+    global wins, losses, history
+
+    chips = START_BALANCE
+    debt = 0
+    turns_left = 0
+    game_round = 1
+
+    wins = 0
+    losses = 0
+    history = []
+
+    update_balance()
+    show_home()
+
+
+# =========================================================
+# ОСНОВНОЙ ИНТЕРФЕЙС
+# =========================================================
+
+main_frame = ctk.CTkFrame(
+    app,
+    fg_color="transparent"
+)
+main_frame.pack(
+    fill="both",
+    expand=True
+)
+
+# =========================================================
+# ЛЕВОЕ МЕНЮ
+# =========================================================
+
+menu_frame = ctk.CTkFrame(
+    main_frame,
+    width=240,
+    corner_radius=0,
+    fg_color="#151515"
+)
+
+menu_frame.pack(
+    side="left",
+    fill="y"
+)
+
+menu_frame.pack_propagate(False)
 
 ctk.CTkLabel(
-    app,
-    text="🎰 КАЗИНО DELUXE",
-    font=("Arial", 38, "bold"),
+    menu_frame,
+    text="🎰\nCASINO",
+    font=("Arial", 28, "bold"),
     text_color="gold"
-).pack(pady=20)
+).pack(pady=25)
 
-round_label = ctk.CTkLabel(
-    app,
-    text="🔄 РАУНД: 1",
-    font=("Arial", 16)
+
+def menu_button(text, command):
+    ctk.CTkButton(
+        menu_frame,
+        text=text,
+        height=42,
+        command=command
+    ).pack(
+        fill="x",
+        padx=15,
+        pady=4
+    )
+
+
+menu_button("🏠 Главная", show_home)
+menu_button("🎡 Рулетка", show_roulette)
+menu_button("🎰 Барабаны", show_slots)
+menu_button("💳 Кредит", show_credit)
+menu_button("💰 Погасить кредит", show_repay)
+menu_button("📜 История", show_history)
+menu_button("📊 Статистика", show_stats)
+menu_button("🎨 Интерфейс", show_interface)
+
+ctk.CTkFrame(
+    menu_frame,
+    height=2,
+    fg_color="#444444"
+).pack(
+    fill="x",
+    padx=15,
+    pady=15
 )
-round_label.pack()
 
-balance = ctk.CTkLabel(
-    app,
-    text="🪙 КРЕДИТИ: 100",
-    font=("Arial", 25, "bold"),
+balance_label = ctk.CTkLabel(
+    menu_frame,
+    text="🪙 100",
+    font=("Arial", 21, "bold"),
     text_color="gold"
 )
-balance.pack(pady=10)
+balance_label.pack(pady=4)
 
 debt_label = ctk.CTkLabel(
-    app,
-    text="💳 БОРГ: 0 🪙",
-    font=("Arial", 20)
+    menu_frame,
+    text="💳 Борг: 0 🪙",
+    font=("Arial", 14)
 )
-debt_label.pack()
+debt_label.pack(pady=4)
 
 timer_label = ctk.CTkLabel(
-    app,
-    text="⏳ ДО ТЕРМІНУ: 0 ХОДІВ",
-    font=("Arial", 17)
+    menu_frame,
+    text="⏳ Ходів: 0",
+    font=("Arial", 14)
 )
-timer_label.pack(pady=5)
+timer_label.pack(pady=4)
 
-
-# =========================
-# КНОПКИ КРЕДИТУ
-# =========================
+round_label = ctk.CTkLabel(
+    menu_frame,
+    text="🔄 Раунд: 1",
+    font=("Arial", 14),
+    text_color="cyan"
+)
+round_label.pack(pady=4)
 
 ctk.CTkButton(
-    app,
-    text="💳 ВЗЯТИ КРЕДИТ 500 🪙",
-    width=300,
-    height=45,
+    menu_frame,
+    text="🔄 НОВА ИГРА",
+    height=40,
     fg_color="#8B0000",
     hover_color="#B00000",
-    command=take_credit
-).pack(pady=8)
-
-ctk.CTkButton(
-    app,
-    text="💰 ПОГАСИТИ КРЕДИТ",
-    width=300,
-    command=repay_credit
-).pack(pady=5)
-
-ctk.CTkButton(
-    app,
-    text="💳 ТУТ ПРОДАЮТЬСЯ ГРОШІ!!!",
-    width=300,
-    command=deposit
-).pack(pady=5)
-
-
-# =========================
-# СТАВКА
-# =========================
-
-bet_entry = ctk.CTkEntry(
-    app,
-    placeholder_text="💰 Сума ставки",
-    width=250,
-    height=40
-)
-bet_entry.pack(pady=20)
-
-
-# =========================
-# СЛОТИ
-# =========================
-
-ctk.CTkLabel(
-    app,
-    text="🎰 СЛОТИ",
-    font=("Arial", 22, "bold")
-).pack()
-
-slot = ctk.CTkLabel(
-    app,
-    text="🍒   🍋   🍒",
-    font=("Arial", 45)
-)
-slot.pack(pady=10)
-
-ctk.CTkButton(
-    app,
-    text="🎰 КРУТИТИ СЛОТИ",
-    width=250,
-    height=45,
-    command=slots
-).pack()
-
-
-# =========================
-# РУЛЕТКА
-# =========================
-
-ctk.CTkLabel(
-    app,
-    text="🎡 РУЛЕТКА",
-    font=("Arial", 22, "bold")
-).pack(pady=(25, 5))
-
-wheel = ctk.CTkLabel(
-    app,
-    text="🟢 0",
-    font=("Arial", 45, "bold")
-)
-wheel.pack(pady=10)
-
-roulette_choice = ctk.StringVar(
-    value="Червоне"
+    command=reset_game
+).pack(
+    fill="x",
+    padx=15,
+    pady=20
 )
 
-ctk.CTkOptionMenu(
-    app,
-    variable=roulette_choice,
-    values=[
-        "Червоне",
-        "Чорне",
-        "Парне",
-        "Непарне"
-    ],
-    width=220
-).pack(pady=5)
+# =========================================================
+# ПРАВАЯ ЧАСТЬ
+# =========================================================
 
-ctk.CTkButton(
-    app,
-    text="🎡 ЗАПУСТИТИ РУЛЕТКУ",
-    width=280,
-    height=50,
-    fg_color="#A00000",
-    hover_color="#D00000",
-    font=("Arial", 17, "bold"),
-    command=roulette
-).pack(pady=10)
-
-
-# =========================
-# РЕЗУЛЬТАТ
-# =========================
-
-result = ctk.CTkLabel(
-    app,
-    text="Зроби ставку 😈",
-    font=("Arial", 18, "bold")
+content_frame = ctk.CTkFrame(
+    main_frame,
+    corner_radius=0,
+    fg_color="#202020"
 )
-result.pack(pady=20)
 
-ctk.CTkLabel(
-    app,
-    text="⚠️ DEMO • Віртуальні кредити • Реальних платежів немає",
-    font=("Arial", 11),
-    text_color="gray"
-).pack(side="bottom", pady=12)
+content_frame.pack(
+    side="right",
+    fill="both",
+    expand=True
+)
+
+# =========================================================
+# ЗАПУСК
+# =========================================================
+
+update_balance()
+show_home()
 
 app.mainloop()
+
